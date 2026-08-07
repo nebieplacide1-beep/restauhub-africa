@@ -20,7 +20,10 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    return get_settings().database_url
+    # Rôle superutilisateur/propriétaire des tables, requis pour le DDL —
+    # jamais celui utilisé par l'application au runtime (voir
+    # src/shared_kernel/config.py et backend/db/init/01-app-role.sql).
+    return get_settings().migrations_database_url
 
 
 def run_migrations_offline() -> None:

@@ -72,3 +72,9 @@ L'implémentation a révélé quelques lacunes dans les documents de conception 
 - `users.tenant_id` rendu nullable pour le Super Administrateur ;
 - ajout de `failed_login_attempts`/`locked_until` (verrouillage de compte, BR-12) ;
 - policies RLS étendues à un contexte `app.auth_lookup`, nécessaire aux flux qui s'exécutent avant que le tenant ne soit connu.
+
+**Deux bugs de sécurité réels, trouvés par le test d'intégration `test_tenant_isolation.py` en l'exécutant contre une vraie base** (et non en le laissant seulement écrit-mais-jamais-lancé) :
+1. `FORCE ROW LEVEL SECURITY` manquant — sans elle, PostgreSQL exempte le propriétaire d'une table de sa propre RLS.
+2. Plus sérieux : le rôle `restauhub` créé par l'image Docker PostgreSQL est un **superutilisateur**, systématiquement exempté de la RLS par PostgreSQL, sans possibilité de le forcer. Un rôle applicatif dédié et restreint (`restauhub_app`, provisionné par `db/init/01-app-role.sql`) a été introduit ; l'application s'y connecte via `DATABASE_URL`, tandis qu'Alembic continue d'utiliser le rôle superutilisateur via `MIGRATIONS_DATABASE_URL` pour le DDL.
+
+Ces deux corrections illustrent pourquoi la règle absolue d'isolation multi-tenant de l'AMD ne peut pas se vérifier par lecture de code seule — `pytest` doit tourner contre une vraie base PostgreSQL avant de considérer ce module validé.

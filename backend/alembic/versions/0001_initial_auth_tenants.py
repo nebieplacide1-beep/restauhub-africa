@@ -89,7 +89,9 @@ def upgrade() -> None:
         sa.Column("role_id", pg.UUID(as_uuid=True), sa.ForeignKey("roles.id"), primary_key=True),
         sa.Column("succursale_id", pg.UUID(as_uuid=True), nullable=True),
         sa.Column("assigned_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.UniqueConstraint("user_id", "role_id", name="uq_user_role"),
+        # Pas de UniqueConstraint séparée : redondante avec la clé primaire
+        # composite (user_id, role_id) — PostgreSQL ne la crée pas deux fois,
+        # ON CONFLICT cible donc ces colonnes directement (voir repositories.py).
     )
 
     op.create_table(
@@ -188,6 +190,14 @@ def _enable_row_level_security() -> None:
     de token, défi 2FA, consultation/acceptation d'invitation) : ce sont des
     points d'entrée fixes et audités du module `auth_tenants`, jamais un
     contournement exposé au reste de l'application.
+
+    `FORCE ROW LEVEL SECURITY` est indispensable : PostgreSQL exempte par
+    défaut le **propriétaire** d'une table de sa propre RLS. Comme l'unique
+    rôle applicatif (`restauhub`, voir docker-compose.yml) est aussi celui qui
+    crée les tables via ces migrations, `ENABLE` seul aurait rendu la RLS
+    silencieusement inopérante pour toutes les requêtes de l'application —
+    exactement le scénario que le test d'intégration
+    `test_tenant_isolation.py` a détecté.
     """
 
     tenant_match = "tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid"
@@ -196,6 +206,7 @@ def _enable_row_level_security() -> None:
 
     for table in ("users", "refresh_tokens", "two_factor_secrets", "invitations", "audit_logs"):
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
+        op.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
         op.execute(
             f"CREATE POLICY tenant_isolation ON {table} "
             f"USING ({tenant_match} OR {is_super_admin} OR {auth_lookup})"
@@ -204,6 +215,7 @@ def _enable_row_level_security() -> None:
     # role_permissions : une ligne à tenant_id NULL est un défaut global,
     # visible de tous (section 5.2 de la conception des données).
     op.execute("ALTER TABLE role_permissions ENABLE ROW LEVEL SECURITY")
+    op.execute("ALTER TABLE role_permissions FORCE ROW LEVEL SECURITY")
     op.execute(
         "CREATE POLICY tenant_isolation ON role_permissions "
         f"USING (tenant_id IS NULL OR {tenant_match} OR {is_super_admin} OR {auth_lookup})"

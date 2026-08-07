@@ -155,6 +155,7 @@ Chaque table portant `tenant_id` (`users`, `refresh_tokens`, `two_factor_secrets
 
 ```sql
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON users
     USING (
         tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
@@ -163,7 +164,7 @@ CREATE POLICY tenant_isolation ON users
     );
 ```
 
-(`NULLIF(..., '')` évite qu'un cast `''::uuid` échoue lorsqu'aucun tenant n'est connu — un cast direct de la chaîne vide est une erreur PostgreSQL, pas juste une valeur fausse.)
+(`NULLIF(..., '')` évite qu'un cast `''::uuid` échoue lorsqu'aucun tenant n'est connu — un cast direct de la chaîne vide est une erreur PostgreSQL, pas juste une valeur fausse. `FORCE ROW LEVEL SECURITY` est tout aussi indispensable : sans elle, PostgreSQL exempte silencieusement le **propriétaire de la table** de sa propre RLS. Cet oubli initial a été détecté par le test d'intégration `test_tenant_isolation.py`, qui a échoué en environnement réel avant d'être corrigé — de même qu'une seconde lacune plus sérieuse : le rôle `restauhub` créé par l'image Docker PostgreSQL est un **superutilisateur**, or PostgreSQL exempte *toujours* un superutilisateur de la RLS, sans aucune exception possible via `FORCE`. La correction définitive n'est donc pas seulement dans cette migration mais aussi dans la configuration des rôles PostgreSQL : un rôle applicatif dédié, non superutilisateur et non propriétaire des tables (`restauhub_app`, voir `backend/db/init/01-app-role.sql`), reçoit uniquement les privilèges `SELECT`/`INSERT`/`UPDATE`/`DELETE` nécessaires ; le rôle superutilisateur `restauhub` reste réservé aux migrations (DDL). C'est ce rôle applicatif restreint que l'API utilise au runtime.)
 
 Le contexte `app.auth_lookup` s'applique aux **six** tables tenant-scopées, pas seulement à `users` : les cas d'usage qui s'exécutent avant que le tenant ne soit connu (`RegisterTenant`, `LoginUser`, `VerifyTwoFactorChallenge`, `RefreshAccessToken`, `AcceptInvitation`, `GetInvitationPreview`) lisent et écrivent potentiellement dans chacune d'elles au cours d'une même transaction (ex. `LoginUser` peut écrire une ligne `audit_logs` avec le `tenant_id` de l'utilisateur trouvé, alors que le GUC `app.tenant_id` de la session est encore vide — sans le bypass, PostgreSQL rejetterait l'écriture via la clause `WITH CHECK` implicite de la policy). En dehors de ce petit ensemble fixe et audité de cas d'usage du module `auth_tenants`, `app.auth_lookup` n'est jamais positionné à `true` — pour tout le reste de l'application, présente et future, la RLS reste pleinement contraignante. `role_permissions` ajoute `tenant_id IS NULL` (défauts globaux, visibles de tous). `roles` et `permissions` sont des tables de référence globales, sans `tenant_id` ni RLS.
 

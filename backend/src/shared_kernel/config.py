@@ -8,7 +8,15 @@ class Settings(BaseSettings):
 
     environment: str = "development"
 
-    database_url: str = "postgresql+asyncpg://restauhub:restauhub@localhost:5432/restauhub"
+    # Rôle applicatif à privilèges limités (ni superutilisateur, ni
+    # propriétaire des tables) : la Row-Level Security ne s'applique jamais à
+    # un superutilisateur PostgreSQL, quels que soient ENABLE/FORCE ROW LEVEL
+    # SECURITY (voir backend/db/init/01-app-role.sql).
+    database_url: str = "postgresql+asyncpg://restauhub_app:restauhub_app@localhost:5432/restauhub"
+    # Rôle superutilisateur/propriétaire, réservé aux migrations Alembic (DDL).
+    migrations_database_url: str = (
+        "postgresql+asyncpg://restauhub:restauhub@localhost:5432/restauhub"
+    )
     redis_url: str = "redis://localhost:6379/0"
 
     jwt_secret_key: str = "change-me-in-every-environment"

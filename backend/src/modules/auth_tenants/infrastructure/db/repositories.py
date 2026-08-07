@@ -220,10 +220,13 @@ class SqlAlchemyRoleRepository(RoleRepository):
         return [_role_to_domain(m) for m in result.scalars().all()]
 
     async def assign_role(self, *, user_id: UUID, role_id: UUID) -> None:
+        # Cible directement les colonnes de la clé primaire composite (pas de
+        # UniqueConstraint séparée, voir models.py) — c'est l'index sur lequel
+        # PostgreSQL peut faire porter ON CONFLICT.
         stmt = (
             pg_insert(UserRoleModel)
             .values(user_id=user_id, role_id=role_id)
-            .on_conflict_do_nothing(constraint="uq_user_role")
+            .on_conflict_do_nothing(index_elements=["user_id", "role_id"])
         )
         await self._session.execute(stmt)
         await self._session.flush()
