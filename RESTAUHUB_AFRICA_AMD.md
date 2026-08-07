@@ -249,7 +249,7 @@ Traiter **un seul module à la fois**, jamais en parallèle, selon la séquence 
 
 - [x] Design system + page d'accueil vitrine (Next.js, charte graphique dérivée du logo) — 2026-08-07
 - [ ] Module 1 : Authentification & gestion des tenants — *étapes 1-8 (conception + backend FastAPI complet + tests, 28/28 passés sous PostgreSQL réel) livrées le 2026-08-07, voir [docs/modules/01-auth-tenants/](./docs/modules/01-auth-tenants/) et [backend/](./backend/) — reste : Flutter (mobile/web), documentation finale, validation*
-- [ ] Module 2 : Restaurants & succursales
+- [ ] Module 2 : Restaurants & succursales — *étapes 1-6 (conception : le tenant est le restaurant, pas d'entité intermédiaire ; succursales + rattachement employé) livrées le 2026-08-07, voir [docs/modules/02-restaurants-succursales/](./docs/modules/02-restaurants-succursales/) — en attente de validation avant le Backend (étape 7)*
 - [ ] Module 3 : Catalogue (produits, menus, catégories)
 - [ ] Module 4 : Commandes & cuisine
 - [ ] Module 5 : Paiements & facturation
