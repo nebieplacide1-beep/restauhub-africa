@@ -75,6 +75,10 @@ PERMISSION_CATALOG: list[tuple[str, str, str]] = [
     ("parametres:manage", "parametres", "manage"),
     ("abonnement:manage", "abonnement", "manage"),
     ("platform:admin", "platform", "admin"),
+    # Module 2 (Restaurants & succursales) — géré ici pour que le catalogue de
+    # permissions reste une source unique, même si le seed applicatif vit dans
+    # le Module 1 (voir docs/modules/02-restaurants-succursales/06-api-specification.md).
+    ("succursales:manage", "succursales", "manage"),
 ]
 
 ROLE_DEFAULT_PERMISSIONS: dict[RoleCode, list[str]] = {
@@ -105,8 +109,9 @@ ROLE_DEFAULT_PERMISSIONS: dict[RoleCode, list[str]] = {
         "promotions:read",
         "promotions:write",
         "rapports:read",
+        "succursales:manage",
     ],
-    RoleCode.PDG: ["rapports:read", "finance:read"],
+    RoleCode.PDG: ["rapports:read", "finance:read", "succursales:manage"],
     RoleCode.COMPTABLE: [
         "finance:read",
         "finance:write",
@@ -123,6 +128,7 @@ ROLE_DEFAULT_PERMISSIONS: dict[RoleCode, list[str]] = {
         "parametres:manage",
         "abonnement:manage",
         "rapports:read",
+        "succursales:manage",
     ],
     RoleCode.SUPER_ADMINISTRATEUR: ["platform:admin"],
 }

@@ -215,32 +215,74 @@ class SqlAlchemyRoleRepository(RoleRepository):
         return [_role_to_domain(m) for m in result.scalars().all()]
 
     async def get_roles_for_user(self, user_id: UUID) -> list[Role]:
+        # distinct() : un même rôle peut désormais être rattaché à plusieurs
+        # succursales pour un même utilisateur (BR2-10 du Module 2) — sans quoi
+        # il apparaîtrait en double dans les permissions résolues.
         result = await self._session.execute(
             select(RoleModel)
+            .distinct()
             .join(UserRoleModel, UserRoleModel.role_id == RoleModel.id)
             .where(UserRoleModel.user_id == user_id)
         )
         return [_role_to_domain(m) for m in result.scalars().all()]
 
-    async def assign_role(self, *, user_id: UUID, role_id: UUID) -> None:
-        # Cible directement les colonnes de la clé primaire composite (pas de
-        # UniqueConstraint séparée, voir models.py) — c'est l'index sur lequel
-        # PostgreSQL peut faire porter ON CONFLICT.
-        stmt = (
-            pg_insert(UserRoleModel)
-            .values(user_id=user_id, role_id=role_id)
-            .on_conflict_do_nothing(index_elements=["user_id", "role_id"])
-        )
+    async def assign_role(
+        self, *, user_id: UUID, role_id: UUID, succursale_id: UUID | None = None
+    ) -> None:
+        # Cible l'un des deux index uniques partiels (voir migration 0003,
+        # Module 2) selon que le rattachement est tenant-wide ou par succursale
+        # — la clé primaire composite du Module 1 ne suffit plus (BR2-10).
+        if succursale_id is None:
+            stmt = (
+                pg_insert(UserRoleModel)
+                .values(user_id=user_id, role_id=role_id, succursale_id=None)
+                .on_conflict_do_nothing(
+                    index_elements=["user_id", "role_id"],
+                    index_where=UserRoleModel.succursale_id.is_(None),
+                )
+            )
+        else:
+            stmt = (
+                pg_insert(UserRoleModel)
+                .values(user_id=user_id, role_id=role_id, succursale_id=succursale_id)
+                .on_conflict_do_nothing(
+                    index_elements=["user_id", "role_id", "succursale_id"],
+                    index_where=UserRoleModel.succursale_id.isnot(None),
+                )
+            )
         await self._session.execute(stmt)
         await self._session.flush()
 
-    async def remove_role(self, *, user_id: UUID, role_id: UUID) -> None:
+    async def remove_role(
+        self, *, user_id: UUID, role_id: UUID, succursale_id: UUID | None = None
+    ) -> None:
+        succursale_condition = (
+            UserRoleModel.succursale_id.is_(None)
+            if succursale_id is None
+            else UserRoleModel.succursale_id == succursale_id
+        )
         await self._session.execute(
             delete(UserRoleModel).where(
-                UserRoleModel.user_id == user_id, UserRoleModel.role_id == role_id
+                UserRoleModel.user_id == user_id,
+                UserRoleModel.role_id == role_id,
+                succursale_condition,
             )
         )
         await self._session.flush()
+
+    async def get_staff_for_succursale(self, succursale_id: UUID) -> list[tuple[UUID, RoleCode]]:
+        result = await self._session.execute(
+            select(UserRoleModel.user_id, RoleModel.code)
+            .join(RoleModel, RoleModel.id == UserRoleModel.role_id)
+            .where(UserRoleModel.succursale_id == succursale_id)
+        )
+        return [(user_id, RoleCode(code)) for user_id, code in result.all()]
+
+    async def get_succursale_ids_for_user(self, user_id: UUID) -> list[UUID | None]:
+        result = await self._session.execute(
+            select(UserRoleModel.succursale_id).where(UserRoleModel.user_id == user_id)
+        )
+        return [row[0] for row in result.all()]
 
 
 class SqlAlchemyPermissionRepository(PermissionRepository):

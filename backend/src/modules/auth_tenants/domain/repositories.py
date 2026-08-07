@@ -70,13 +70,38 @@ class RoleRepository(ABC):
     async def list_all(self) -> list[Role]: ...
 
     @abstractmethod
-    async def get_roles_for_user(self, user_id: UUID) -> list[Role]: ...
+    async def get_roles_for_user(self, user_id: UUID) -> list[Role]:
+        """Rôles distincts d'un utilisateur, tenant-wide et par-succursale confondus
+        — les permissions restent résolues au niveau rôle, indépendamment de la
+        portée du rattachement (BR2-11 du Module 2)."""
 
     @abstractmethod
-    async def assign_role(self, *, user_id: UUID, role_id: UUID) -> None: ...
+    async def assign_role(
+        self, *, user_id: UUID, role_id: UUID, succursale_id: UUID | None = None
+    ) -> None:
+        """`succursale_id=None` (défaut) : rattachement tenant-wide, comportement
+        du Module 1 inchangé. Un `succursale_id` restreint le rattachement à une
+        succursale précise (Module 2, BR2-08/BR2-09)."""
 
     @abstractmethod
-    async def remove_role(self, *, user_id: UUID, role_id: UUID) -> None: ...
+    async def remove_role(
+        self, *, user_id: UUID, role_id: UUID, succursale_id: UUID | None = None
+    ) -> None:
+        """Cible le rattachement exact (même triplet), pas tous les rattachements
+        de ce rôle pour cet utilisateur — un utilisateur peut avoir le même rôle
+        à plusieurs succursales (BR2-10)."""
+
+    @abstractmethod
+    async def get_staff_for_succursale(self, succursale_id: UUID) -> list[tuple[UUID, RoleCode]]:
+        """Paires (user_id, role_code) rattachées à cette succursale précise —
+        utilisé par le Module 2 pour lister le personnel d'une succursale."""
+
+    @abstractmethod
+    async def get_succursale_ids_for_user(self, user_id: UUID) -> list[UUID | None]:
+        """Valeurs brutes de `succursale_id` pour tous les rattachements de cet
+        utilisateur (`None` inclus) — le Module 2 les interprète pour déterminer
+        le périmètre opérationnel (tenant-wide si un `None` est présent,
+        BR2-08)."""
 
 
 class PermissionRepository(ABC):

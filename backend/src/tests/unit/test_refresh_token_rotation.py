@@ -41,7 +41,7 @@ def _setup():
         created_at=NOW,
     )
     users.by_id[user.id] = user
-    roles.assignments[user.id] = {role.id}
+    roles.assignments[user.id] = {(role.id, None)}
 
     raw_token = generate_opaque_token()
     original = RefreshToken(

@@ -36,6 +36,8 @@ from src.modules.auth_tenants.domain.repositories import (
     TwoFactorRepository,
     UserRepository,
 )
+from src.modules.succursales.domain.entities import Succursale
+from src.modules.succursales.domain.repositories import SuccursaleRepository
 
 
 class FakeClock(Clock):
@@ -157,7 +159,8 @@ class FakeUserRepository(UserRepository):
 class FakeRoleRepository(RoleRepository):
     def __init__(self, roles: list[Role] | None = None) -> None:
         self.roles: dict[UUID, Role] = {r.id: r for r in (roles or [])}
-        self.assignments: dict[UUID, set[UUID]] = {}
+        # user_id -> {(role_id, succursale_id | None)}
+        self.assignments: dict[UUID, set[tuple[UUID, UUID | None]]] = {}
 
     async def get_by_code(self, code: RoleCode) -> Role | None:
         return next((r for r in self.roles.values() if r.code == code), None)
@@ -166,13 +169,29 @@ class FakeRoleRepository(RoleRepository):
         return list(self.roles.values())
 
     async def get_roles_for_user(self, user_id: UUID) -> list[Role]:
-        return [self.roles[rid] for rid in self.assignments.get(user_id, set())]
+        role_ids = {role_id for role_id, _ in self.assignments.get(user_id, set())}
+        return [self.roles[rid] for rid in role_ids]
 
-    async def assign_role(self, *, user_id: UUID, role_id: UUID) -> None:
-        self.assignments.setdefault(user_id, set()).add(role_id)
+    async def assign_role(
+        self, *, user_id: UUID, role_id: UUID, succursale_id: UUID | None = None
+    ) -> None:
+        self.assignments.setdefault(user_id, set()).add((role_id, succursale_id))
 
-    async def remove_role(self, *, user_id: UUID, role_id: UUID) -> None:
-        self.assignments.setdefault(user_id, set()).discard(role_id)
+    async def remove_role(
+        self, *, user_id: UUID, role_id: UUID, succursale_id: UUID | None = None
+    ) -> None:
+        self.assignments.setdefault(user_id, set()).discard((role_id, succursale_id))
+
+    async def get_staff_for_succursale(self, succursale_id: UUID) -> list[tuple[UUID, RoleCode]]:
+        return [
+            (user_id, self.roles[role_id].code)
+            for user_id, pairs in self.assignments.items()
+            for role_id, sid in pairs
+            if sid == succursale_id
+        ]
+
+    async def get_succursale_ids_for_user(self, user_id: UUID) -> list[UUID | None]:
+        return [sid for _, sid in self.assignments.get(user_id, set())]
 
 
 class FakePermissionRepository(PermissionRepository):
@@ -279,3 +298,23 @@ class FakeMailer(Mailer):
 
     async def send_password_reset(self, *, to: str, reset_link: str) -> None:
         self.password_resets.append({"to": to, "reset_link": reset_link})
+
+
+class FakeSuccursaleRepository(SuccursaleRepository):
+    def __init__(self) -> None:
+        self.by_id: dict[UUID, Succursale] = {}
+
+    async def add(self, succursale: Succursale) -> None:
+        self.by_id[succursale.id] = succursale
+
+    async def get_by_id(self, succursale_id: UUID) -> Succursale | None:
+        return self.by_id.get(succursale_id)
+
+    async def list_by_tenant(self, tenant_id: UUID) -> list[Succursale]:
+        return [s for s in self.by_id.values() if s.tenant_id == tenant_id]
+
+    async def list_by_ids(self, succursale_ids: list[UUID]) -> list[Succursale]:
+        return [s for sid in succursale_ids if (s := self.by_id.get(sid)) is not None]
+
+    async def update(self, succursale: Succursale) -> None:
+        self.by_id[succursale.id] = succursale

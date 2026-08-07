@@ -2,13 +2,17 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from src.modules.auth_tenants.api.v1.router import router as auth_tenants_router
+from src.modules.succursales.api.v1.succursales_router import router as succursales_router
 from src.shared_kernel.exceptions import DomainError
 
 
 def create_app() -> FastAPI:
     app = FastAPI(
         title="RestauHub Africa API",
-        description="Module 1 : Authentification & gestion des tenants",
+        description=(
+            "Module 1 : Authentification & gestion des tenants — "
+            "Module 2 : Restaurants & succursales"
+        ),
         version="0.1.0",
     )
 
@@ -22,6 +26,7 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(auth_tenants_router, prefix="/api/v1")
+    app.include_router(succursales_router, prefix="/api/v1")
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:

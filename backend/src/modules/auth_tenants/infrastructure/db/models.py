@@ -90,16 +90,18 @@ class PermissionModel(Base):
 
 class UserRoleModel(Base):
     __tablename__ = "user_roles"
-    # Pas de UniqueConstraint séparée : redondante avec la clé primaire
-    # composite (user_id, role_id), voir la migration 0001.
+    # Clé de substitution (voir migration 0003, Module 2) : la clé composite
+    # (user_id, role_id) du Module 1 empêchait un même rôle d'être rattaché à
+    # plusieurs succursales pour un même utilisateur (BR2-10 du Module 2).
+    # L'unicité est désormais portée par deux index partiels (tenant-wide vs
+    # par-succursale) plutôt que par la clé primaire.
 
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    role_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("roles.id"))
+    succursale_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("succursales.id"), nullable=True
     )
-    role_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("roles.id"), primary_key=True
-    )
-    succursale_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     assigned_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -61,7 +61,7 @@ def _setup(*, two_factor_enabled: bool = False, tenant_status: TenantStatus = Te
         created_at=NOW,
     )
     users.by_id[user.id] = user
-    roles.assignments[user.id] = {role.id}
+    roles.assignments[user.id] = {(role.id, None)}
 
     use_case = LoginUser(
         users,

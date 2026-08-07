@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from alembic import context
 from src.modules.auth_tenants.infrastructure.db import models  # noqa: F401 — idem
+from src.modules.succursales.infrastructure.db import models as succursales_models  # noqa: F401
 from src.shared_kernel.audit.models import (
     AuditLogModel,  # noqa: F401 — enregistre le modèle sur Base.metadata
 )

@@ -19,6 +19,7 @@
 - **BR2-10** : Un même utilisateur peut être rattaché à plusieurs succursales du même tenant, avec le même rôle ou des rôles différents selon la succursale (ex. Gérant de la succursale A, simple Serveur en renfort à la succursale B).
 - **BR2-11** : Le rattachement à une succursale ne modifie pas les permissions accordées par le rôle (celles-ci restent résolues au niveau tenant, BR-21/BR-23 du Module 1) — il ne fait que délimiter le **périmètre opérationnel** dans lequel ce rôle s'exerce. Ce sont les modules opérationnels futurs (Catalogue, Commandes...) qui appliqueront ce périmètre lors de leurs propres vérifications.
 - **BR2-12** : Retirer le dernier rattachement d'un utilisateur à une succursale ne désactive pas son compte (BR-11 du Module 1 reste le seul mécanisme de désactivation) ; l'utilisateur reste actif mais n'a plus de périmètre opérationnel tant qu'aucun nouveau rattachement n'est créé.
+- **BR2-15** *(ajout post-implémentation, découvert par le test bout-en-bout)* : Une invitation (BR-09 du Module 1) accorde son rôle **tenant-wide** par défaut, faute pour le Module 1 de connaître la notion de succursale. Rattacher explicitement ce rôle à une succursale via `POST /succursales/{id}/staff` **retire** ce rattachement tenant-wide plutôt que de le cumuler — sans quoi BR2-09 ne pourrait jamais s'appliquer à un utilisateur invité. Un Administrateur ou PDG qui a besoin d'un rôle réellement tenant-wide ne doit donc pas être rattaché à une succursale par la suite.
 
 ## 2.3 Consultation multi-succursales
 

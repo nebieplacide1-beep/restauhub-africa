@@ -57,7 +57,7 @@ async def test_register_tenant_creates_tenant_and_admin_user() -> None:
     assert stored_user.tenant_id == result.tenant.id
     assert stored_user.email == "owner@lebonmaquis.ci"
     admin_role_id = next(iter(roles.roles))
-    assert admin_role_id in roles.assignments[result.user_id]
+    assert (admin_role_id, None) in roles.assignments[result.user_id]
 
 
 @pytest.mark.asyncio
