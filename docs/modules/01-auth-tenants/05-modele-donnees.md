@@ -13,6 +13,9 @@ erDiagram
     USERS ||--o{ REFRESH_TOKENS : emet
     USERS ||--o| TWO_FACTOR_SECRETS : configure
     USERS ||--o{ AUDIT_LOGS : declenche
+    TENANTS ||--o{ INVITATIONS : emet
+    ROLES ||--o{ INVITATIONS : "role initial"
+    USERS ||--o{ INVITATIONS : invite
 
     TENANTS {
         uuid id PK
@@ -28,12 +31,14 @@ erDiagram
 
     USERS {
         uuid id PK
-        uuid tenant_id FK
-        text email UK "nullable, unique par tenant"
-        text phone_number UK "nullable, unique par tenant"
+        uuid tenant_id FK "nullable, cf amendement 5.2 (Super Administrateur)"
+        text email UK "nullable, unique globalement"
+        text phone_number UK "nullable, unique globalement"
         text password_hash
         boolean is_active
         boolean two_factor_enabled
+        int failed_login_attempts "BR-12"
+        timestamptz locked_until "BR-12, nullable"
         timestamptz last_login_at
         timestamptz created_at
         timestamptz updated_at
@@ -68,6 +73,7 @@ erDiagram
 
     REFRESH_TOKENS {
         uuid id PK
+        uuid tenant_id FK "denormalise, pour la RLS"
         uuid user_id FK
         text token_hash UK
         timestamptz expires_at
@@ -79,6 +85,7 @@ erDiagram
 
     TWO_FACTOR_SECRETS {
         uuid user_id PK_FK
+        uuid tenant_id FK "denormalise, pour la RLS"
         text encrypted_secret
         text[] recovery_codes_hashed
         timestamptz created_at
@@ -94,13 +101,37 @@ erDiagram
         jsonb metadata
         timestamptz created_at
     }
+
+    INVITATIONS {
+        uuid id PK
+        uuid tenant_id FK
+        text email "nullable"
+        text phone_number "nullable"
+        uuid role_id FK
+        uuid invited_by FK
+        text token_hash UK
+        text status "pending | accepted | expired | revoked"
+        timestamptz expires_at
+        timestamptz accepted_at "nullable"
+        timestamptz created_at
+    }
 ```
 
-## 5.2 Notes de conception par table
+## 5.2 Amendement post-validation (implémentation, 2026-08-07)
+
+En implémentant le cas d'usage de connexion, une incohérence est apparue dans la version initialement validée de ce document : l'unicité d'`email`/`phone_number` **par tenant** rend la connexion ambiguë, puisque l'identifiant seul (sans connaître le tenant au préalable) ne permet pas de savoir dans quel tenant chercher l'utilisateur — et la Row-Level Security interdit par construction toute lecture cross-tenant implicite.
+
+**Correctif appliqué** : `email` et `phone_number` sont désormais uniques **globalement** sur la plateforme (cohérent avec la décision déjà validée BR-07 : un compte = un tenant, donc une personne gérant plusieurs tenants utilise déjà plusieurs comptes/emails distincts). La recherche d'un utilisateur par identifiant au moment du login s'effectue via un contexte de session dédié et restreint (`app.auth_lookup`, voir [03-architecture.md](./03-architecture.md#isolation-multi-tenant)), jamais via une désactivation générale de la RLS. Par conséquent, `refresh_tokens` et `two_factor_secrets` portent désormais aussi `tenant_id` (dénormalisé) pour rester filtrables par RLS au même titre que les autres tables sensibles.
+
+Ajout mineur du même passage : `users` gagne `failed_login_attempts` et `locked_until`, nécessaires pour implémenter le verrouillage de compte (BR-12), omis du modèle initial. La table `invitations` (BR-09/BR-10), décrite en toutes lettres dans les règles métier mais absente du schéma d'origine, est ajoutée pour porter l'état d'une invitation en attente (email/téléphone cible, rôle initial, expiration 72h).
+
+Enfin, `users.tenant_id` devient **nullable** : BR-24 exige que le Super Administrateur ne soit jamais rattaché à un tenant, ce qui était incompatible avec une clé étrangère obligatoire. Un compte Super Administrateur n'est jamais créé via `POST /tenants` ni via une invitation (ces deux chemins sont exclusivement tenant-scopés) — il est provisionné une fois via un script d'amorçage (`backend/scripts/create_super_admin.py`), en dehors de l'API publique.
+
+## 5.3 Notes de conception par table
 
 **`tenants`** — Racine de l'isolation multi-tenant. `slug` unique globalement (index unique). `status` : `en_essai | actif | suspendu | résilié` (enum PostgreSQL).
 
-**`users`** — `email` et `phone_number` sont uniques **par tenant** (index unique composite `(tenant_id, email)` et `(tenant_id, phone_number)`, partiels `WHERE ... IS NOT NULL`), pas uniques globalement : rien n'empêche deux tenants différents d'avoir un utilisateur avec le même email (BR-07, un compte par tenant). Contrainte `CHECK` : au moins un de `email`/`phone_number` non nul (BR-06).
+**`users`** — `email` et `phone_number` sont uniques **globalement** (voir 5.2), chacun avec un index unique partiel `WHERE ... IS NOT NULL`. Contrainte `CHECK` : au moins un de `email`/`phone_number` non nul (BR-06).
 
 **`roles`** — Les 12 rôles de l'AMD sont insérés en seed avec `is_system_role = true` (non supprimables). Un Administrateur pourra créer des rôles additionnels par tenant dans une évolution future (`tenant_id` nullable non présent en v1 — hors périmètre, voir décisions à valider dans [03-architecture.md](./03-architecture.md#décisions-à-valider)).
 
@@ -116,14 +147,24 @@ erDiagram
 
 **`audit_logs`** — Append-only (BR-26) : aucun `UPDATE`/`DELETE` autorisé au niveau applicatif ; `metadata` (JSONB) porte les détails spécifiques à chaque type d'action sans multiplier les colonnes.
 
-## 5.3 Row-Level Security (référence croisée)
+**`invitations`** — `token_hash` suit la même politique que `refresh_tokens` (jamais le token en clair). `status` passe à `expired` par lecture paresseuse (comparaison à `expires_at`) plutôt que par une tâche planifiée, pour rester simple en v1.
 
-Chaque table portant `tenant_id` (`users`, `role_permissions`, `audit_logs`) active une policy RLS équivalente à :
+## 5.4 Row-Level Security (référence croisée)
+
+Chaque table portant `tenant_id` (`users`, `refresh_tokens`, `two_factor_secrets`, `invitations`, `role_permissions`, `audit_logs`) active une policy RLS de la forme :
 
 ```sql
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON users
-    USING (tenant_id = current_setting('app.tenant_id')::uuid);
+    USING (
+        tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+        OR current_setting('app.is_super_admin', true) = 'true'
+        OR current_setting('app.auth_lookup', true) = 'true'
+    );
 ```
 
-Le détail d'implémentation (migration Alembic, positionnement de `app.tenant_id` par le middleware) est traité à l'étape 7 (Backend), pas dans ce document de conception.
+(`NULLIF(..., '')` évite qu'un cast `''::uuid` échoue lorsqu'aucun tenant n'est connu — un cast direct de la chaîne vide est une erreur PostgreSQL, pas juste une valeur fausse.)
+
+Le contexte `app.auth_lookup` s'applique aux **six** tables tenant-scopées, pas seulement à `users` : les cas d'usage qui s'exécutent avant que le tenant ne soit connu (`RegisterTenant`, `LoginUser`, `VerifyTwoFactorChallenge`, `RefreshAccessToken`, `AcceptInvitation`, `GetInvitationPreview`) lisent et écrivent potentiellement dans chacune d'elles au cours d'une même transaction (ex. `LoginUser` peut écrire une ligne `audit_logs` avec le `tenant_id` de l'utilisateur trouvé, alors que le GUC `app.tenant_id` de la session est encore vide — sans le bypass, PostgreSQL rejetterait l'écriture via la clause `WITH CHECK` implicite de la policy). En dehors de ce petit ensemble fixe et audité de cas d'usage du module `auth_tenants`, `app.auth_lookup` n'est jamais positionné à `true` — pour tout le reste de l'application, présente et future, la RLS reste pleinement contraignante. `role_permissions` ajoute `tenant_id IS NULL` (défauts globaux, visibles de tous). `roles` et `permissions` sont des tables de référence globales, sans `tenant_id` ni RLS.
+
+Le détail d'implémentation (migration Alembic, positionnement des GUC par `tenant_scoped_session`/`auth_lookup_session`) est traité à l'étape 7 (Backend, voir `backend/src/shared_kernel/db/session.py` et `backend/alembic/versions/0001_initial_auth_tenants.py`).
