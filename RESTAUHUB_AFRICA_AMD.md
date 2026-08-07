@@ -248,7 +248,7 @@ Traiter **un seul module à la fois**, jamais en parallèle, selon la séquence 
 ## 14. Statut du projet
 
 - [x] Design system + page d'accueil vitrine (Next.js, charte graphique dérivée du logo) — 2026-08-07
-- [ ] Module 1 : Authentification & gestion des tenants — *à démarrer*
+- [ ] Module 1 : Authentification & gestion des tenants — *étapes 1-6 (analyse, business rules, architecture, base de données, API) livrées le 2026-08-07, voir [docs/modules/01-auth-tenants/](./docs/modules/01-auth-tenants/) — en attente de validation avant le Backend (étape 7)*
 - [ ] Module 2 : Restaurants & succursales
 - [ ] Module 3 : Catalogue (produits, menus, catégories)
 - [ ] Module 4 : Commandes & cuisine
