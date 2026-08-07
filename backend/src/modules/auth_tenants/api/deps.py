@@ -30,6 +30,7 @@ from src.modules.auth_tenants.application.ports import (
 from src.modules.auth_tenants.domain.entities import User
 from src.modules.auth_tenants.domain.repositories import (
     InvitationRepository,
+    PasswordResetTokenRepository,
     PermissionRepository,
     RefreshTokenRepository,
     RoleRepository,
@@ -41,6 +42,7 @@ from src.modules.auth_tenants.infrastructure.audit_recorder import SqlAlchemyAud
 from src.modules.auth_tenants.infrastructure.clock import SystemClock
 from src.modules.auth_tenants.infrastructure.db.repositories import (
     SqlAlchemyInvitationRepository,
+    SqlAlchemyPasswordResetTokenRepository,
     SqlAlchemyPermissionRepository,
     SqlAlchemyRefreshTokenRepository,
     SqlAlchemyRoleRepository,
@@ -90,6 +92,10 @@ def get_clock() -> Clock:
 
 def get_activation_base_url() -> str:
     return f"{get_settings().frontend_url}/invitations"
+
+
+def get_reset_base_url() -> str:
+    return f"{get_settings().frontend_url}/reset-password"
 
 
 # --- Authentification ---
@@ -166,6 +172,7 @@ class Repositories:
     refresh_tokens: RefreshTokenRepository
     two_factor: TwoFactorRepository
     invitations: InvitationRepository
+    password_resets: PasswordResetTokenRepository
     audit: AuditRecorder
 
 
@@ -178,6 +185,7 @@ def build_repositories(session: AsyncSession) -> Repositories:
         refresh_tokens=SqlAlchemyRefreshTokenRepository(session),
         two_factor=SqlAlchemyTwoFactorRepository(session),
         invitations=SqlAlchemyInvitationRepository(session),
+        password_resets=SqlAlchemyPasswordResetTokenRepository(session),
         audit=SqlAlchemyAuditRecorder(session),
     )
 

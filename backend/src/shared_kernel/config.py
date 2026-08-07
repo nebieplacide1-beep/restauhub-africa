@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     frontend_url: str = "http://localhost:3000"
     invitation_ttl_hours: int = 72
+    password_reset_ttl_minutes: int = 60
     failed_login_max_attempts: int = 5
     failed_login_lockout_minutes: int = 15
 

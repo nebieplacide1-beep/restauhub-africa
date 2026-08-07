@@ -16,6 +16,7 @@ erDiagram
     TENANTS ||--o{ INVITATIONS : emet
     ROLES ||--o{ INVITATIONS : "role initial"
     USERS ||--o{ INVITATIONS : invite
+    USERS ||--o{ PASSWORD_RESET_TOKENS : demande
 
     TENANTS {
         uuid id PK
@@ -115,6 +116,16 @@ erDiagram
         timestamptz accepted_at "nullable"
         timestamptz created_at
     }
+
+    PASSWORD_RESET_TOKENS {
+        uuid id PK
+        uuid tenant_id FK "nullable, denormalise pour la RLS"
+        uuid user_id FK
+        text token_hash UK
+        timestamptz expires_at
+        timestamptz used_at "nullable, usage unique"
+        timestamptz created_at
+    }
 ```
 
 ## 5.2 Amendement post-validation (implémentation, 2026-08-07)
@@ -149,9 +160,11 @@ Enfin, `users.tenant_id` devient **nullable** : BR-24 exige que le Super Adminis
 
 **`invitations`** — `token_hash` suit la même politique que `refresh_tokens` (jamais le token en clair). `status` passe à `expired` par lecture paresseuse (comparaison à `expires_at`) plutôt que par une tâche planifiée, pour rester simple en v1.
 
+**`password_reset_tokens`** *(ajoutée après validation initiale, BR-16bis)* — Complète `POST /auth/password/forgot`/`reset`, prévus dans la spécification API validée mais absents du schéma d'origine. Même politique de hachage que `refresh_tokens`/`invitations` ; `used_at` porte l'usage unique plutôt qu'un `status` textuel, le cycle de vie étant plus simple (pas d'étape "accepted" distincte).
+
 ## 5.4 Row-Level Security (référence croisée)
 
-Chaque table portant `tenant_id` (`users`, `refresh_tokens`, `two_factor_secrets`, `invitations`, `role_permissions`, `audit_logs`) active une policy RLS de la forme :
+Chaque table portant `tenant_id` (`users`, `refresh_tokens`, `two_factor_secrets`, `invitations`, `password_reset_tokens`, `role_permissions`, `audit_logs`) active une policy RLS de la forme :
 
 ```sql
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
@@ -166,6 +179,6 @@ CREATE POLICY tenant_isolation ON users
 
 (`NULLIF(..., '')` évite qu'un cast `''::uuid` échoue lorsqu'aucun tenant n'est connu — un cast direct de la chaîne vide est une erreur PostgreSQL, pas juste une valeur fausse. `FORCE ROW LEVEL SECURITY` est tout aussi indispensable : sans elle, PostgreSQL exempte silencieusement le **propriétaire de la table** de sa propre RLS. Cet oubli initial a été détecté par le test d'intégration `test_tenant_isolation.py`, qui a échoué en environnement réel avant d'être corrigé — de même qu'une seconde lacune plus sérieuse : le rôle `restauhub` créé par l'image Docker PostgreSQL est un **superutilisateur**, or PostgreSQL exempte *toujours* un superutilisateur de la RLS, sans aucune exception possible via `FORCE`. La correction définitive n'est donc pas seulement dans cette migration mais aussi dans la configuration des rôles PostgreSQL : un rôle applicatif dédié, non superutilisateur et non propriétaire des tables (`restauhub_app`, voir `backend/db/init/01-app-role.sql`), reçoit uniquement les privilèges `SELECT`/`INSERT`/`UPDATE`/`DELETE` nécessaires ; le rôle superutilisateur `restauhub` reste réservé aux migrations (DDL). C'est ce rôle applicatif restreint que l'API utilise au runtime.)
 
-Le contexte `app.auth_lookup` s'applique aux **six** tables tenant-scopées, pas seulement à `users` : les cas d'usage qui s'exécutent avant que le tenant ne soit connu (`RegisterTenant`, `LoginUser`, `VerifyTwoFactorChallenge`, `RefreshAccessToken`, `AcceptInvitation`, `GetInvitationPreview`) lisent et écrivent potentiellement dans chacune d'elles au cours d'une même transaction (ex. `LoginUser` peut écrire une ligne `audit_logs` avec le `tenant_id` de l'utilisateur trouvé, alors que le GUC `app.tenant_id` de la session est encore vide — sans le bypass, PostgreSQL rejetterait l'écriture via la clause `WITH CHECK` implicite de la policy). En dehors de ce petit ensemble fixe et audité de cas d'usage du module `auth_tenants`, `app.auth_lookup` n'est jamais positionné à `true` — pour tout le reste de l'application, présente et future, la RLS reste pleinement contraignante. `role_permissions` ajoute `tenant_id IS NULL` (défauts globaux, visibles de tous). `roles` et `permissions` sont des tables de référence globales, sans `tenant_id` ni RLS.
+Le contexte `app.auth_lookup` s'applique aux **sept** tables tenant-scopées, pas seulement à `users` : les cas d'usage qui s'exécutent avant que le tenant ne soit connu (`RegisterTenant`, `LoginUser`, `VerifyTwoFactorChallenge`, `RefreshAccessToken`, `AcceptInvitation`, `GetInvitationPreview`, `ForgotPassword`, `ResetPassword`) lisent et écrivent potentiellement dans chacune d'elles au cours d'une même transaction (ex. `LoginUser` peut écrire une ligne `audit_logs` avec le `tenant_id` de l'utilisateur trouvé, alors que le GUC `app.tenant_id` de la session est encore vide — sans le bypass, PostgreSQL rejetterait l'écriture via la clause `WITH CHECK` implicite de la policy). En dehors de ce petit ensemble fixe et audité de cas d'usage du module `auth_tenants`, `app.auth_lookup` n'est jamais positionné à `true` — pour tout le reste de l'application, présente et future, la RLS reste pleinement contraignante. `role_permissions` ajoute `tenant_id IS NULL` (défauts globaux, visibles de tous). `roles` et `permissions` sont des tables de référence globales, sans `tenant_id` ni RLS.
 
-Le détail d'implémentation (migration Alembic, positionnement des GUC par `tenant_scoped_session`/`auth_lookup_session`) est traité à l'étape 7 (Backend, voir `backend/src/shared_kernel/db/session.py` et `backend/alembic/versions/0001_initial_auth_tenants.py`).
+Le détail d'implémentation (migration Alembic, positionnement des GUC par `tenant_scoped_session`/`auth_lookup_session`) est traité à l'étape 7 (Backend, voir `backend/src/shared_kernel/db/session.py`, `backend/alembic/versions/0001_initial_auth_tenants.py` et `0002_password_reset_tokens.py`).

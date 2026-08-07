@@ -9,8 +9,10 @@ from src.modules.auth_tenants.api.deps import (
     get_clock,
     get_current_user,
     get_hasher,
+    get_mailer,
     get_public_repositories,
     get_repositories,
+    get_reset_base_url,
     get_token_service,
     get_two_factor_service,
 )
@@ -19,8 +21,10 @@ from src.modules.auth_tenants.application.dto import (
     ConfirmTwoFactorOutput,
     DisableTwoFactorInput,
     EnableTwoFactorOutput,
+    ForgotPasswordInput,
     LoginInput,
     RefreshTokenInput,
+    ResetPasswordInput,
     TokenPair,
     TwoFactorChallenge,
     VerifyTwoFactorInput,
@@ -29,6 +33,7 @@ from src.modules.auth_tenants.application.ports import (
     AccessTokenClaims,
     Clock,
     Hasher,
+    Mailer,
     TokenService,
     TwoFactorService,
 )
@@ -38,6 +43,10 @@ from src.modules.auth_tenants.application.use_cases.auth_use_cases import (
     LogoutUser,
     RefreshAccessToken,
     VerifyTwoFactorChallenge,
+)
+from src.modules.auth_tenants.application.use_cases.password_reset_use_cases import (
+    ForgotPassword,
+    ResetPassword,
 )
 from src.modules.auth_tenants.application.use_cases.two_factor_use_cases import (
     ConfirmTwoFactor,
@@ -176,3 +185,38 @@ async def disable_two_factor(
     await DisableTwoFactor(
         repos.two_factor, repos.users, two_factor_service, hasher, repos.audit
     ).execute(user, payload)
+
+
+@router.post("/password/forgot", status_code=202)
+async def forgot_password(
+    payload: ForgotPasswordInput,
+    repos: Repositories = Depends(get_public_repositories),
+    mailer: Mailer = Depends(get_mailer),
+    clock: Clock = Depends(get_clock),
+    reset_base_url: str = Depends(get_reset_base_url),
+) -> None:
+    """BR-16bis : réponse 202 identique que l'identifiant existe ou non."""
+    settings = get_settings()
+    use_case = ForgotPassword(
+        repos.users,
+        repos.password_resets,
+        mailer,
+        clock,
+        repos.audit,
+        reset_token_ttl_minutes=settings.password_reset_ttl_minutes,
+        reset_base_url=reset_base_url,
+    )
+    await use_case.execute(payload)
+
+
+@router.post("/password/reset", status_code=204)
+async def reset_password(
+    payload: ResetPasswordInput,
+    repos: Repositories = Depends(get_public_repositories),
+    hasher: Hasher = Depends(get_hasher),
+    clock: Clock = Depends(get_clock),
+) -> None:
+    use_case = ResetPassword(
+        repos.password_resets, repos.users, repos.refresh_tokens, hasher, clock, repos.audit
+    )
+    await use_case.execute(payload)

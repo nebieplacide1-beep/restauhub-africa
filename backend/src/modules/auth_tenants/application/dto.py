@@ -68,6 +68,15 @@ class RefreshTokenInput(BaseModel):
     refresh_token: str
 
 
+class ForgotPasswordInput(BaseModel):
+    identifier: str
+
+
+class ResetPasswordInput(BaseModel):
+    token: str
+    new_password: str
+
+
 class CurrentUserOutput(BaseModel):
     user_id: UUID
     tenant_id: UUID | None

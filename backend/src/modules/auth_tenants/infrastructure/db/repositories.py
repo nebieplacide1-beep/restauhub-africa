@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.auth_tenants.domain.entities import (
     Invitation,
     InvitationStatus,
+    PasswordResetToken,
     Permission,
     RefreshToken,
     Role,
@@ -28,6 +29,7 @@ from src.modules.auth_tenants.domain.entities import (
 )
 from src.modules.auth_tenants.domain.repositories import (
     InvitationRepository,
+    PasswordResetTokenRepository,
     PermissionRepository,
     RefreshTokenRepository,
     RoleRepository,
@@ -37,6 +39,7 @@ from src.modules.auth_tenants.domain.repositories import (
 )
 from src.modules.auth_tenants.infrastructure.db.models import (
     InvitationModel,
+    PasswordResetTokenModel,
     PermissionModel,
     RefreshTokenModel,
     RoleModel,
@@ -423,3 +426,43 @@ class SqlAlchemyInvitationRepository(InvitationRepository):
         model.expires_at = invitation.expires_at
         model.accepted_at = invitation.accepted_at
         await self._session.flush()
+
+
+class SqlAlchemyPasswordResetTokenRepository(PasswordResetTokenRepository):
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add(self, token: PasswordResetToken) -> None:
+        self._session.add(
+            PasswordResetTokenModel(
+                id=token.id,
+                tenant_id=token.tenant_id,
+                user_id=token.user_id,
+                token_hash=token.token_hash,
+                expires_at=token.expires_at,
+            )
+        )
+        await self._session.flush()
+
+    async def get_by_token_hash(self, token_hash: str) -> PasswordResetToken | None:
+        result = await self._session.execute(
+            select(PasswordResetTokenModel).where(PasswordResetTokenModel.token_hash == token_hash)
+        )
+        model = result.scalars().first()
+        if model is None:
+            return None
+        return PasswordResetToken(
+            id=model.id,
+            tenant_id=model.tenant_id,
+            user_id=model.user_id,
+            token_hash=model.token_hash,
+            expires_at=model.expires_at,
+            used_at=model.used_at,
+            created_at=model.created_at,
+        )
+
+    async def mark_used(self, token_id: UUID) -> None:
+        model = await self._session.get(PasswordResetTokenModel, token_id)
+        if model is not None:
+            model.used_at = model.used_at or datetime.now(UTC)
+            await self._session.flush()

@@ -11,6 +11,7 @@ from uuid import UUID
 
 from src.modules.auth_tenants.domain.entities import (
     Invitation,
+    PasswordResetToken,
     Permission,
     RefreshToken,
     Role,
@@ -134,3 +135,14 @@ class InvitationRepository(ABC):
 
     @abstractmethod
     async def update(self, invitation: Invitation) -> None: ...
+
+
+class PasswordResetTokenRepository(ABC):
+    @abstractmethod
+    async def add(self, token: PasswordResetToken) -> None: ...
+
+    @abstractmethod
+    async def get_by_token_hash(self, token_hash: str) -> PasswordResetToken | None: ...
+
+    @abstractmethod
+    async def mark_used(self, token_id: UUID) -> None: ...

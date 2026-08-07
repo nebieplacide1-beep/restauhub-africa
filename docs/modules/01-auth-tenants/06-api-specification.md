@@ -95,6 +95,17 @@ Inscription libre-service.
 ### `POST /auth/2fa/disable`
 *Authentifié, nécessite mot de passe + code 2FA courant dans le corps de la requête* (BR-19).
 
+---
+
+### `POST /auth/password/forgot`
+**Requête** : `{ "identifier": "owner@lebonmaquis.ci" }`
+**Réponse `202`**, systématiquement, que l'identifiant corresponde ou non à un compte (BR-16bis, anti-énumération). Si un compte actif existe, un email contenant un lien de réinitialisation (token opaque, 1h de validité) est envoyé.
+
+### `POST /auth/password/reset`
+**Requête** : `{ "token": "...", "new_password": "N0uveauMotDePasse!" }`
+**Réponse `204`**. Révoque tous les refresh tokens actifs de l'utilisateur (BR-16).
+**Erreurs** : `401 invalid_or_expired_reset_token` (token inconnu, expiré ou déjà utilisé — à usage unique), `422 validation_error` (mot de passe non conforme à BR-08).
+
 ## 6.3 Gestion des utilisateurs du tenant
 
 *Toutes les routes de cette section nécessitent la permission `users:manage`, typiquement Administrateur.*

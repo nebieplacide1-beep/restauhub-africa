@@ -24,6 +24,7 @@
 - **BR-14** : Le token d'accès contient : `user_id`, `tenant_id`, `role`, liste des permissions effectives, date d'expiration. Il ne contient aucune donnée personnelle sensible (email, téléphone).
 - **BR-15** : La révocation d'un refresh token (déconnexion explicite, changement de mot de passe, désactivation du compte) invalide immédiatement toute nouvelle tentative de rafraîchissement ; le token d'accès déjà émis reste valide au maximum 15 minutes (fenêtre de risque acceptée et documentée).
 - **BR-16** : Le changement de mot de passe révoque tous les refresh tokens actifs de l'utilisateur, sur tous ses appareils.
+- **BR-16bis** *(ajout post-validation, mot de passe oublié)* : Une demande de réinitialisation génère un token opaque à usage unique, valable 1 heure, envoyé à l'identifiant fourni. La réponse à `POST /auth/password/forgot` est identique que l'identifiant corresponde ou non à un compte existant, pour ne pas révéler l'existence d'un compte (protection contre l'énumération d'utilisateurs). La réinitialisation applique la même politique de mot de passe (BR-08) et révoque tous les refresh tokens actifs (BR-16).
 
 ## 2.4 Authentification à deux facteurs (2FA)
 

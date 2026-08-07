@@ -11,7 +11,7 @@ Suivi du module selon la méthode en 11 étapes définie dans l'AMD (section 13)
 | 5 | Base de données | ✅ | [05-modele-donnees.md](./05-modele-donnees.md) |
 | 6 | API | ✅ | [06-api-specification.md](./06-api-specification.md) |
 | 7 | Backend | ✅ | [../../../backend](../../../backend) |
-| 8 | Tests | ✅ 21/21 (unitaires + intégration + API, exécutés contre PostgreSQL réel) | [../../../backend/src/tests](../../../backend/src/tests) |
+| 8 | Tests | ✅ 28/28 (unitaires + intégration + API, exécutés contre PostgreSQL réel) | [../../../backend/src/tests](../../../backend/src/tests) |
 | 9 | Flutter (mobile/web) | ⏳ non démarré | — |
 | 10 | Documentation finale | ⏳ | — |
 | 11 | Validation | ⏳ | — |
@@ -20,4 +20,4 @@ Suivi du module selon la méthode en 11 étapes définie dans l'AMD (section 13)
 
 **L'exécution des tests d'intégration a trouvé deux bugs de sécurité réels** (RLS non appliquée faute de `FORCE ROW LEVEL SECURITY`, puis rôle applicatif superutilisateur systématiquement exempté de la RLS) — corrigés, voir backend/README.md. C'est la preuve concrète que ces tests avaient une valeur autre que documentaire.
 
-**Non couvert par cette passe** : `POST /auth/password/forgot` et `POST /auth/password/reset` (dans la spécification, pas encore implémentés — voir backend/README.md).
+La spécification API validée est désormais couverte intégralement, y compris `POST /auth/password/forgot`/`reset` (ajouté après coup, migration `0002`).

@@ -60,9 +60,7 @@ Les tests unitaires (`src/tests/unit/`) tournent sans base de données via des r
 
 ## État par rapport à la spécification validée
 
-Conforme à [`docs/modules/01-auth-tenants/06-api-specification.md`](../docs/modules/01-auth-tenants/06-api-specification.md), à une exception près :
-
-- **Non implémenté dans cette passe** : `POST /auth/password/forgot` et `POST /auth/password/reset`. Le reste de la spécification (inscription, connexion, 2FA, rafraîchissement de token, invitations, gestion des utilisateurs/rôles, administration des tenants) est implémenté et testé.
+Conforme intégralement à [`docs/modules/01-auth-tenants/06-api-specification.md`](../docs/modules/01-auth-tenants/06-api-specification.md) : inscription, connexion, 2FA, rafraîchissement de token, mot de passe oublié, invitations, gestion des utilisateurs/rôles, administration des tenants — implémenté et testé (28/28 tests, dont le flux complet oubli/réinitialisation de mot de passe en bout-en-bout).
 
 ## Corrections apportées à la conception pendant l'implémentation
 
@@ -78,3 +76,5 @@ L'implémentation a révélé quelques lacunes dans les documents de conception 
 2. Plus sérieux : le rôle `restauhub` créé par l'image Docker PostgreSQL est un **superutilisateur**, systématiquement exempté de la RLS par PostgreSQL, sans possibilité de le forcer. Un rôle applicatif dédié et restreint (`restauhub_app`, provisionné par `db/init/01-app-role.sql`) a été introduit ; l'application s'y connecte via `DATABASE_URL`, tandis qu'Alembic continue d'utiliser le rôle superutilisateur via `MIGRATIONS_DATABASE_URL` pour le DDL.
 
 Ces deux corrections illustrent pourquoi la règle absolue d'isolation multi-tenant de l'AMD ne peut pas se vérifier par lecture de code seule — `pytest` doit tourner contre une vraie base PostgreSQL avant de considérer ce module validé.
+
+**Mot de passe oublié** (`POST /auth/password/forgot`/`reset`) a été ajouté après coup : prévu dans la spécification API validée mais initialement laissé de côté par souci de ne pas livrer d'implémentation bâclée. Nécessite une nouvelle table (`password_reset_tokens`, migration `0002`), documentée dans le même esprit d'amendement post-validation que les corrections ci-dessus — voir [`05-modele-donnees.md`](../docs/modules/01-auth-tenants/05-modele-donnees.md#password_reset_tokens-ajoutée-après-validation-initiale-br-16bis).

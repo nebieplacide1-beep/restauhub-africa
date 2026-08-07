@@ -60,3 +60,7 @@ class InvitationNotFoundError(NotFoundError):
 class InvitationExpiredError(DomainError):
     code = "invitation_expired"
     http_status = 410
+
+
+class PasswordResetTokenInvalidError(UnauthenticatedError):
+    code = "invalid_or_expired_reset_token"

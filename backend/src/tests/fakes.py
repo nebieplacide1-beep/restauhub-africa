@@ -12,10 +12,12 @@ from src.modules.auth_tenants.application.ports import (
     AuditRecorder,
     Clock,
     Hasher,
+    Mailer,
     TokenService,
 )
 from src.modules.auth_tenants.domain.entities import (
     Invitation,
+    PasswordResetToken,
     Permission,
     RefreshToken,
     Role,
@@ -26,6 +28,7 @@ from src.modules.auth_tenants.domain.entities import (
 )
 from src.modules.auth_tenants.domain.repositories import (
     InvitationRepository,
+    PasswordResetTokenRepository,
     PermissionRepository,
     RefreshTokenRepository,
     RoleRepository,
@@ -246,3 +249,33 @@ class FakeInvitationRepository(InvitationRepository):
 
     async def update(self, invitation: Invitation) -> None:
         self.by_id[invitation.id] = invitation
+
+
+class FakePasswordResetTokenRepository(PasswordResetTokenRepository):
+    def __init__(self) -> None:
+        self.by_id: dict[UUID, PasswordResetToken] = {}
+
+    async def add(self, token: PasswordResetToken) -> None:
+        self.by_id[token.id] = token
+
+    async def get_by_token_hash(self, token_hash: str) -> PasswordResetToken | None:
+        return next((t for t in self.by_id.values() if t.token_hash == token_hash), None)
+
+    async def mark_used(self, token_id: UUID) -> None:
+        token = self.by_id.get(token_id)
+        if token is not None:
+            token.used_at = token.used_at or datetime.now(UTC)
+
+
+class FakeMailer(Mailer):
+    def __init__(self) -> None:
+        self.invitations: list[dict] = []
+        self.password_resets: list[dict] = []
+
+    async def send_invitation(self, *, to: str, tenant_name: str, activation_link: str) -> None:
+        self.invitations.append(
+            {"to": to, "tenant_name": tenant_name, "activation_link": activation_link}
+        )
+
+    async def send_password_reset(self, *, to: str, reset_link: str) -> None:
+        self.password_resets.append({"to": to, "reset_link": reset_link})

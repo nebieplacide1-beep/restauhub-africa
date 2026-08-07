@@ -141,3 +141,19 @@ class Invitation:
 
     def is_usable(self, *, at: datetime) -> bool:
         return self.status == InvitationStatus.PENDING and self.expires_at > at
+
+
+@dataclass(slots=True)
+class PasswordResetToken:
+    """BR-16bis : token opaque à usage unique, durée de vie courte (1h)."""
+
+    id: UUID
+    tenant_id: UUID | None
+    user_id: UUID
+    token_hash: str
+    expires_at: datetime
+    used_at: datetime | None = None
+    created_at: datetime | None = None
+
+    def is_usable(self, *, at: datetime) -> bool:
+        return self.used_at is None and self.expires_at > at
